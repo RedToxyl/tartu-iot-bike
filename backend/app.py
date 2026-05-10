@@ -30,10 +30,17 @@ def require_api_key(func):
 
 @app.route("/api/register", methods=["POST"])
 @require_api_key
-def register_sensor():
+def register_station():
     data = request.json
 
     conn = sqlite3.connect(DB_PATH)
+
+    # check if station with the same id already exists
+    existing = conn.execute("SELECT * FROM stations WHERE id = ?", (data["id"],)).fetchone()
+    if existing:
+        conn.close()
+        return {"error": "Station with this ID already exists"}, 400
+        
     conn.execute(
         "INSERT INTO stations (id, name, longitude, latitude) VALUES (?, ?, ?, ?)",
         (data["id"], data["name"], data["longitude"], data["latitude"])
@@ -45,7 +52,7 @@ def register_sensor():
 
 @app.route("/api/log", methods=["POST"])
 @require_api_key
-def add_sensor_data():
+def add_station_data():
     data = request.json
 
     conn = sqlite3.connect(DB_PATH)
