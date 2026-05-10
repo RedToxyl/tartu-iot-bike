@@ -10,17 +10,17 @@ on:
 jobs:
     deploy:
         runs-on: ubuntu-latest
-            steps:
-                - name: Install SSH key
-                uses: shimataro/ssh-key-action@v2
-                with:
-                    key: ${{ secrets.SSH_PRIVATE_KEY }}
-                    known_hosts: ${{ secrets.KNOWN_HOSTS }}
+        steps:
+            - name: Install SSH key
+              uses: shimataro/ssh-key-action@v2
+              with:
+                  key: ${{ secrets.SSH_PRIVATE_KEY }}
+                  known_hosts: ${{ secrets.KNOWN_HOSTS }}
 
-                - name: Deploy to server
-                run: |
-                    ssh -o StrictHostKeyChecking=no user@your-server-ip "
-                    cd /path/to/your/repo &&
-                    git pull origin main &&
-                    ./deploy.sh backend
-                    "
+            - name: Deploy to server
+              run: |
+                  ssh -o StrictHostKeyChecking=no user@your-server-ip "
+                  cd /path/to/your/repo &&
+                  git pull origin main &&
+                  ./deploy.sh backend
+                  "
