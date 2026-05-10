@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- This is a Jinja based template. To read more about Jinja, check
+ https://jinja.palletsprojects.com/en/3.0.x/  -->
+<title>Tartu IOT Bikestations</title>
+
+<body>
+    <h4> Tartu IOT Bikestations</h4>
+
+    <div id="map" style="height: 500px;"></div>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        const map = L.map('map').setView([58.3776, 26.7290], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        const stationMarkers = new Map();
+
+        async function loadStations() {
+            try {
+                const response = await fetch('{{ backend_url }}/api/stations', {
+                    headers: {
+                        'content-type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Station request failed: ${response.status}`);
+                }
+
+                const stations = await response.json();
+                const currentIds = new Set();
+
+                stations.data.forEach(station => {
+                    const [id, name, latitude, longitude] = station;
+                    currentIds.add(id);
+
+                    if (stationMarkers.has(id)) {
+                        stationMarkers.get(id).setLatLng([latitude, longitude]);
+                    } else {
+                        const marker = L.marker([latitude, longitude])
+                            .addTo(map)
+                            .bindPopup(`<strong>${name || 'Station'}</strong><br>ID: ${id}`);
+                        stationMarkers.set(id, marker);
+                    }
+                });
+
+                stationMarkers.forEach((marker, id) => {
+                    if (!currentIds.has(id)) {
+                        map.removeLayer(marker);
+                        stationMarkers.delete(id);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading stations:', error);
+            }
+        }
+
+        loadStations();
+        setInterval(loadStations, 15000);
+    </script>
+</body>

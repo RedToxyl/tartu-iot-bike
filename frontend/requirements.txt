@@ -1,0 +1,3 @@
+# this file defines the pip packages neede by this application
+flask==3.1.2
+gunicorn
