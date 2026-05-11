@@ -6,7 +6,7 @@
 <body>
     <h4> Tartu IOT Bikestations</h4>
 
-    <div id="map" style="height: 500px;"></div>
+    <div id="map" style="height: 800px;"></div>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
@@ -21,31 +21,93 @@
 
         const stationMarkers = new Map();
 
+        function getStationColor(freeSpots, lastUpdateTime) {
+            // Check if last update was more than an hour ago
+            const now = new Date();
+            const lastUpdate = new Date(lastUpdateTime);
+            const diffMinutes = (now - lastUpdate) / (1000 * 60);
+
+            if (diffMinutes > 60) {
+                return '#808080'; // grey
+            }
+
+            // Color based on free spots
+            if (freeSpots >= 3) {
+                return '#0066cc'; // blue
+            } else if (freeSpots >= 1 && freeSpots <= 2) {
+                return '#ff9933'; // orange
+            } else {
+                return '#cc0000'; // red
+            }
+        }
+
+        function formatTimeEEST(isoString) {
+            const date = new Date(isoString);
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Tallinn',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }).format(date) + ' EEST';
+        }
+
         async function loadStations() {
             try {
-                const response = await fetch('{{ backend_url }}/api/stations', {
+                const stationsResponse = await fetch('/api/stations', {
                     headers: {
                         'content-type': 'application/json'
                     }
                 });
 
-                if (!response.ok) {
-                    throw new Error(`Station request failed: ${response.status}`);
+                const measurementsResponse = await fetch('/api/measurements', {
+                    headers: {
+                        'content-type': 'application/json'
+                    }
+                });
+
+                if (!stationsResponse.ok || !measurementsResponse.ok) {
+                    throw new Error('Request failed');
                 }
 
-                const stations = await response.json();
+                const stations = await stationsResponse.json();
+                const measurements = await measurementsResponse.json();
+
                 const currentIds = new Set();
 
                 stations.data.forEach(station => {
-                    const [id, name, latitude, longitude] = station;
+                    const { id, name, latitude, longitude } = station;
+
                     currentIds.add(id);
+
+                    const measurement = measurements.data.find(m => m.station_id === id);
+                    const freeSpots = measurement ? measurement.free_spaces : 0;
+
+                    const lastUpdate = measurement
+                        ? measurement.timestamp
+                        : new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+                    const color = getStationColor(freeSpots, lastUpdate);
+
+                    const lastUpdateText = formatTimeEEST(lastUpdate);
 
                     if (stationMarkers.has(id)) {
                         stationMarkers.get(id).setLatLng([latitude, longitude]);
+                        stationMarkers.get(id).setStyle({ color: color, fillColor: color });
+                        stationMarkers.get(id).getPopup().setContent(`<strong>${name || 'Station'}</strong><br>ID: ${id}<br>Free spots: ${freeSpots}<br>Last update: ${lastUpdateText}`);
                     } else {
-                        const marker = L.marker([latitude, longitude])
+                        const marker = L.circleMarker([latitude, longitude], {
+                            radius: 8,
+                            fillColor: color,
+                            color: color,
+                            weight: 2,
+                            opacity: 0.8,
+                            fillOpacity: 0.8
+                        })
                             .addTo(map)
-                            .bindPopup(`<strong>${name || 'Station'}</strong><br>ID: ${id}`);
+                            .bindPopup(`<strong>${name || 'Station'}</strong><br>ID: ${id}<br>Free spots: ${freeSpots}<br>Last update: ${lastUpdateText}`);
                         stationMarkers.set(id, marker);
                     }
                 });

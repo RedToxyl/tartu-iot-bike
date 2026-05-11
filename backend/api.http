@@ -1,3 +1,5 @@
+###
+
 GET http://localhost:5000/api/measurements HTTP/1.1
 content-type: application/json
 
@@ -7,28 +9,35 @@ GET http://localhost:5000/api/stations HTTP/1.1
 content-type: application/json
 
 ###
-
+# @prompt token
 POST http://localhost:5000/api/register HTTP/1.1
 content-type: application/json
-Authorization: xxx
+Authorization: {{token}}
 
 {
-    "name": "A",
+    "name": "Park",
     "id": 1,
-    "longitude": 26.72,
-    "latitude": 58.36
+    "longitude": 26.726,
+    "latitude": 58.386
 }
 
-###
 
+###
+# @prompt token
 POST http://localhost:5000/api/log HTTP/1.1
 content-type: application/json
-Authorization: xxx
+Authorization: {{token}}
 
 {
-    "station_id": 123,
-    "timestamp": "2024-06-01T12:00:00Z",
-    "free_spaces": 5,
+    "station_id": 0,
+    "timestamp": "{{$datetime iso8601}}",
+    "free_spaces": 0,
     "used_spaces": 10,
     "total_spaces": 15
 }
+
+###
+# @prompt token
+POST http://localhost:5000/api/reset_db HTTP/1.1
+content-type: application/json
+Authorization: {{token}}
