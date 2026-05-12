@@ -1,46 +1,92 @@
-//@hostname = localhost
-@hostname = iot.corebyte.ee
+@hostname = http://localhost:5000
 
-###
-
-GET http://{{hostname}}:5000/api/measurements HTTP/1.1
-content-type: application/json
-
-###
-
-GET http://{{hostname}}:5000/api/stations HTTP/1.1
-content-type: application/json
-
-###
-# @prompt token
-POST http://{{hostname}}:5000/api/register HTTP/1.1
-content-type: application/json
-Authorization: {{token}}
+### Keep alive
+POST {{hostname}}/api/keep_alive
+Content-Type: application/json
+Authorization: {{TOKEN}}
 
 {
-    "name": "Park",
-    "id": 1,
-    "longitude": 26.726,
-    "latitude": 58.386
+  "id": "0"
+}
+
+### Reset DB
+POST {{hostname}}/api/reset_db
+Content-Type: application/json
+Authorization: {{TOKEN}}
+
+### Get specific table in full
+POST {{hostname}}/api/get_table
+Content-Type: application/json
+Authorization: {{TOKEN}}
+
+{
+  "table": "events"
+}
+
+### Overview
+GET {{hostname}}/api/overview
+Accept: application/json
+
+
+### Stations
+GET {{hostname}}/api/stations
+Accept: application/json
+
+
+### Create station
+POST {{hostname}}/api/create_station
+Content-Type: application/json
+Authorization: {{TOKEN}}
+
+{
+  "id": "0",
+  "name": "Delta",
+  "lat": 58.386,
+  "lon": 26.726
 }
 
 
-###
-# @prompt token
-POST http://{{hostname}}:5000/api/log HTTP/1.1
-content-type: application/json
-Authorization: {{token}}
+### Create space
+POST {{hostname}}/api/create_space
+Content-Type: application/json
+Authorization: {{TOKEN}}
 
 {
-    "station_id": 0,
-    "timestamp": "{{$datetime iso8601}}",
-    "free_spaces": 0,
-    "used_spaces": 10,
-    "total_spaces": 15
+  "station": "0",
+  "space": "A"
 }
 
-###
-# @prompt token
-POST http://{{hostname}}:5000/api/reset_db HTTP/1.1
-content-type: application/json
-Authorization: {{token}}
+
+### Delete space
+POST {{hostname}}/api/delete_space
+Content-Type: application/json
+Authorization: {{TOKEN}}
+
+{
+  "station": "0",
+  "space": "A"
+}
+
+
+### Lock space
+POST {{hostname}}/api/lock
+Content-Type: application/json
+Authorization: {{TOKEN}}
+
+{
+  "station": "0",
+  "space": "A",
+  "rfid": "RFID-12345"
+}
+
+
+### Unlock space
+POST {{hostname}}/api/unlock
+Content-Type: application/json
+Authorization: {{TOKEN}}
+
+{
+  "station": "0",
+  "space": "A",
+  "rfid": "RFID-12345"
+}

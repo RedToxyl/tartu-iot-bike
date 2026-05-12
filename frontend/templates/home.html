@@ -30,7 +30,6 @@
             if (diffMinutes > 60) {
                 return '#808080'; // grey
             }
-
             // Color based on free spots
             if (freeSpots >= 3) {
                 return '#0066cc'; // blue
@@ -56,39 +55,29 @@
 
         async function loadStations() {
             try {
-                const stationsResponse = await fetch('/api/stations', {
+                const stationsResponse = await fetch('/api/overview', {
                     headers: {
                         'content-type': 'application/json'
                     }
                 });
 
-                const measurementsResponse = await fetch('/api/measurements', {
-                    headers: {
-                        'content-type': 'application/json'
-                    }
-                });
-
-                if (!stationsResponse.ok || !measurementsResponse.ok) {
+                if (!stationsResponse.ok) {
                     throw new Error('Request failed');
                 }
 
                 const stations = await stationsResponse.json();
-                const measurements = await measurementsResponse.json();
 
                 const currentIds = new Set();
 
                 stations.data.forEach(station => {
-                    const { id, name, latitude, longitude } = station;
+                    const { id, name, latitude, longitude, free_spaces, used_spaces, keepalive } = station;
 
                     currentIds.add(id);
 
-                    const measurement = measurements.data.find(m => m.station_id === id);
-                    const freeSpots = measurement ? measurement.free_spaces : 0;
-                    const totalSpots = measurement ? measurement.total_spaces : 0;
+                    const freeSpots = free_spaces;
+                    const totalSpots = free_spaces + used_spaces;
 
-                    const lastUpdate = measurement
-                        ? measurement.timestamp
-                        : new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+                    const lastUpdate = new Date(keepalive)
 
                     const color = getStationColor(freeSpots, lastUpdate);
 
