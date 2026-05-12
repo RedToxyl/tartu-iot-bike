@@ -84,6 +84,7 @@
 
                     const measurement = measurements.data.find(m => m.station_id === id);
                     const freeSpots = measurement ? measurement.free_spaces : 0;
+                    const totalSpots = measurement ? measurement.total_spaces : 0;
 
                     const lastUpdate = measurement
                         ? measurement.timestamp
@@ -96,7 +97,7 @@
                     if (stationMarkers.has(id)) {
                         stationMarkers.get(id).setLatLng([latitude, longitude]);
                         stationMarkers.get(id).setStyle({ color: color, fillColor: color });
-                        stationMarkers.get(id).getPopup().setContent(`<strong>${name || 'Station'}</strong><br>ID: ${id}<br>Free spots: ${freeSpots}<br>Last update: ${lastUpdateText}`);
+                        stationMarkers.get(id).getPopup().setContent(`<strong>${name || 'Station'}</strong><br>ID: ${id}<br>Free spots: ${freeSpots} / ${totalSpots}<br>Last update: ${lastUpdateText}`);
                     } else {
                         const marker = L.circleMarker([latitude, longitude], {
                             radius: 8,
@@ -107,7 +108,7 @@
                             fillOpacity: 0.8
                         })
                             .addTo(map)
-                            .bindPopup(`<strong>${name || 'Station'}</strong><br>ID: ${id}<br>Free spots: ${freeSpots}<br>Last update: ${lastUpdateText}`);
+                            .bindPopup(`<strong>${name || 'Station'}</strong><br>ID: ${id}<br>Free spots: ${freeSpots} / ${totalSpots}<br>Last update: ${lastUpdateText}`);
                         stationMarkers.set(id, marker);
                     }
                 });
