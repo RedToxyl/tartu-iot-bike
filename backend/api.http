@@ -1,16 +1,19 @@
+//@hostname = localhost
+@hostname = iot.corebyte.ee
+
 ###
 
-GET http://localhost:5000/api/measurements HTTP/1.1
+GET http://{{hostname}}:5000/api/measurements HTTP/1.1
 content-type: application/json
 
 ###
 
-GET http://localhost:5000/api/stations HTTP/1.1
+GET http://{{hostname}}:5000/api/stations HTTP/1.1
 content-type: application/json
 
 ###
 # @prompt token
-POST http://localhost:5000/api/register HTTP/1.1
+POST http://{{hostname}}:5000/api/register HTTP/1.1
 content-type: application/json
 Authorization: {{token}}
 
@@ -24,7 +27,7 @@ Authorization: {{token}}
 
 ###
 # @prompt token
-POST http://localhost:5000/api/log HTTP/1.1
+POST http://{{hostname}}:5000/api/log HTTP/1.1
 content-type: application/json
 Authorization: {{token}}
 
@@ -38,6 +41,6 @@ Authorization: {{token}}
 
 ###
 # @prompt token
-POST http://localhost:5000/api/reset_db HTTP/1.1
+POST http://{{hostname}}:5000/api/reset_db HTTP/1.1
 content-type: application/json
 Authorization: {{token}}
