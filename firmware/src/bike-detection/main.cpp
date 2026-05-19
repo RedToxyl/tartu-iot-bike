@@ -22,19 +22,19 @@ boolean has_bike() {
     return true;
 }
 
-void check_for_bike(char *topic, char *payload) {
+void check_for_bike() {
     bool bike_present = has_bike();
-    ECL::publish("space/a/result", bike_present ? "present" : "absent");
+    ECL::publish("space/0/result", bike_present ? "present" : "absent");
 }
 
 void setup()
 {
     ECL::begin();
-    ECL::subscribe("space/a/check", check_for_bike);
 }
 
 void loop()
 {
     ECL::loop();
-    delay(150);
+    check_for_bike();
+    delay(1000);
 }

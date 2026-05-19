@@ -2,3 +2,4 @@ backend/api_keys.json
 __pycache__/
 *.db
 .pio/
+firmware/src/keys.h

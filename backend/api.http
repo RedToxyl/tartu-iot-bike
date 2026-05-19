@@ -33,6 +33,14 @@ Accept: application/json
 GET {{hostname}}/api/stations
 Accept: application/json
 
+### Spaces
+POST {{hostname}}/api/space
+Content-Type: application/json
+
+{
+  "station": "0",
+  "space": "A"
+}
 
 ### Create station
 POST {{hostname}}/api/create_station
