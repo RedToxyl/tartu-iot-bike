@@ -16,7 +16,7 @@ namespace ECL
         bool _longPressTriggered;
         bool _initiated;
 
-        unsigned long _debounceDelay = 50;
+        unsigned long _debounceDelay = 20;
         unsigned long _longPressDelay = 1000;
 
         std::function<void()> _onPress = nullptr;

@@ -3,27 +3,35 @@
 #include <vector>
 
 // ========== VALIDATION & DEPENDENCIES ==========
+// If OTA, MQTT, or Telnet are defined, MUST have WiFi enabled.
 #if defined(ECL_OTA_HOSTNAME) || defined(ECL_MQTT_SERVER) || defined(ECL_TELNET_PORT)
 #ifndef ECL_WIFI_SSID
 #error "ECL Error: ECL_WIFI_SSID must be defined to use OTA, MQTT, or Telnet!"
 #endif
 #endif
 
-// ========== WIFI GLOBALS ==========
-#if defined(ECL_WIFI_SSID)
-
-#if defined(ESP32)
-  #include <WiFi.h>
-#elif defined(ESP8266)
-  #include <ESP8266WiFi.h>
+#if defined(ECL_SOFTWARE_SERIAL_ENABLE_LOGS)
+#if !defined(ECL_SOFTWARE_SERIAL_RX) || !defined(ECL_SOFTWARE_SERIAL_TX)
+#error "ECL Error: Software Serial logs require both ECL_SOFTWARE_SERIAL_RX and ECL_SOFTWARE_SERIAL_TX!"
+#endif
 #endif
 
+#if defined(ECL_HARDWARE_SERIAL_ENABLE_LOGS)
+#if !defined(ECL_HARDWARE_SERIAL_PORT) || !defined(ECL_HARDWARE_SERIAL_RX) || !defined(ECL_HARDWARE_SERIAL_TX)
+#error "ECL Error: Hardware Serial logs require ECL_HARDWARE_SERIAL_PORT, ECL_HARDWARE_SERIAL_RX, and ECL_HARDWARE_SERIAL_TX!"
+#endif
+#endif
+
+// ========== WIFI GLOBALS ==========
+#if defined(ECL_WIFI_SSID) || defined(ECL_ESPNOW_ENABLE)
+#include <WiFi.h>
 #ifndef ECL_WIFI_PASSWORD
 #define ECL_WIFI_PASSWORD "iotempire"
 #endif
-
 WiFiClient wifiClient;
-
+#ifndef ECL_WIFI_CHANNEL
+#define ECL_WIFI_CHANNEL 1 
+#endif
 #endif
 
 // ========== SOFTWARE SERIAL GLOBALS ==========
@@ -35,19 +43,30 @@ WiFiClient wifiClient;
 SoftwareSerial softwareSerial(ECL_SOFTWARE_SERIAL_RX, ECL_SOFTWARE_SERIAL_TX);
 #endif
 
-// ========== TELNET GLOBALS ==========
-#if defined(ECL_SOFTWARE_SERIAL_ENABLE_LOGS)
-#if !defined(ECL_SOFTWARE_SERIAL_RX) || !defined(ECL_SOFTWARE_SERIAL_TX)
-#error "ECL Error: Software Serial logs require both ECL_SOFTWARE_SERIAL_RX and ECL_SOFTWARE_SERIAL_TX!"
+// ========== HARDWARE SERIAL GLOBALS ==========
+#if defined(ECL_HARDWARE_SERIAL_PORT) && defined(ECL_HARDWARE_SERIAL_RX) && defined(ECL_HARDWARE_SERIAL_TX)
+#ifndef ECL_HARDWARE_SERIAL_SPEED
+#define ECL_HARDWARE_SERIAL_SPEED 9600
 #endif
+HardwareSerial hardwareSerial(ECL_HARDWARE_SERIAL_PORT);
 #endif
 
+// ========== TELNET GLOBALS ==========
 #if defined(ECL_TELNET_PORT)
 WiFiServer telnetServer(ECL_TELNET_PORT);
 WiFiClient telnetClient;
 #endif
 
 // ========== MQTT GLOBALS ==========
+#if defined(ECL_MQTT_SERVER) || defined(ECL_ESPNOW_ENABLE)
+struct MqttSubscription
+{
+    String topic;
+    std::function<void(char *, byte *, unsigned int)> callback;
+};
+std::vector<MqttSubscription> _eclMqttSubscriptions;
+#endif
+
 #if defined(ECL_MQTT_SERVER)
 #include <PubSubClient.h>
 #ifndef ECL_MQTT_PORT
@@ -57,14 +76,69 @@ WiFiClient telnetClient;
 #define ECL_MQTT_CLIENT "node"
 #endif
 PubSubClient mqttClient(wifiClient);
+#endif
 
-struct MqttSubscription
+// ========== ESP-NOW MESH GLOBALS ==========
+#if defined(ECL_ESPNOW_ENABLE)
+#include <esp_now.h>
+#include <esp_wifi.h>
+
+struct EclEspNowMsg
 {
-    String topic;
-    std::function<void(char *, byte *, unsigned int)> callback;
+    uint32_t nodeId;
+    uint32_t msgId;
+    char topic[64];
+    char payload[170];
+};
+struct EclMsgQueueItem
+{
+    EclEspNowMsg msg;
+    unsigned long processTime;
+    bool needsRebroadcast;
+    bool needsBroker;
 };
 
-std::vector<MqttSubscription> _eclMqttSubscriptions;
+const int MAX_QUEUE_SIZE = 15;
+EclMsgQueueItem _eclMsgQueue[MAX_QUEUE_SIZE];
+uint8_t _qHead = 0;
+uint8_t _qTail = 0;
+
+uint32_t _eclNodeId = 0;
+uint32_t _eclMsgSeq = 0;
+const int MAX_SEEN_MSGS = 30;
+uint32_t _seenMsgs[MAX_SEEN_MSGS];
+uint8_t _seenMsgIdx = 0;
+uint8_t _broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+bool _isMsgSeen(uint32_t nId, uint32_t mId)
+{
+    uint32_t hash = nId ^ mId;
+    for (int i = 0; i < MAX_SEEN_MSGS; i++)
+    {
+        if (_seenMsgs[i] == hash)
+            return true;
+    }
+    return false;
+}
+
+void _markMsgSeen(uint32_t nId, uint32_t mId)
+{
+    _seenMsgs[_seenMsgIdx] = (nId ^ mId);
+    _seenMsgIdx = (_seenMsgIdx + 1) % MAX_SEEN_MSGS;
+}
+
+void _espNowBroadcast(uint32_t nId, uint32_t mId, const char *topic, const char *payload)
+{
+    EclEspNowMsg msg;
+    msg.nodeId = nId;
+    msg.msgId = mId;
+    strncpy(msg.topic, topic, sizeof(msg.topic) - 1);
+    msg.topic[sizeof(msg.topic) - 1] = '\0';
+    strncpy(msg.payload, payload, sizeof(msg.payload) - 1);
+    msg.payload[sizeof(msg.payload) - 1] = '\0';
+
+    esp_now_send(_broadcastAddress, (uint8_t *)&msg, sizeof(EclEspNowMsg));
+}
 #endif
 
 // ========== OTA GLOBALS ==========
@@ -82,18 +156,18 @@ struct EclTimer
     unsigned long lastRun;
     std::function<void()> callback;
 };
-
 class Logger : public Print
 {
 public:
     size_t write(uint8_t c) override
     {
         size_t n = Serial.write(c);
-
 #if defined(ECL_SOFTWARE_SERIAL_ENABLE_LOGS)
         softwareSerial.write(c);
 #endif
-
+#if defined(ECL_HARDWARE_SERIAL_ENABLE_LOGS) && defined(ECL_HARDWARE_SERIAL_PORT)
+        hardwareSerial.write(c);
+#endif
 #if defined(ECL_TELNET_PORT)
         if (telnetClient && telnetClient.connected())
             telnetClient.write(c);
@@ -112,25 +186,27 @@ namespace ECL
     {
         _eclLoopHandlers.push_back(cb);
     }
-
     inline void setInterval(unsigned long intervalMs, std::function<void()> cb)
     {
         _eclTimers.push_back({intervalMs, millis(), cb});
     }
+    // --- Logging ---
 
     Logger log;
 
-#if defined(ECL_MQTT_SERVER)
+    // --- MQTT ---
 
+#if defined(ECL_MQTT_SERVER) || defined(ECL_ESPNOW_ENABLE)
     bool _mqttTopicMatch(const char *sub, const char *topic)
     {
         while (*sub && *topic)
         {
-            if (*sub == '#') return true;
-
+            if (*sub == '#')
+                return true;
             if (*sub == '+')
             {
-                while (*topic && *topic != '/') topic++;
+                while (*topic && *topic != '/')
+                    topic++;
                 sub++;
                 if (*topic == '/' && *sub == '/')
                 {
@@ -139,15 +215,13 @@ namespace ECL
                 }
                 continue;
             }
-
-            if (*sub != *topic) return false;
-
+            if (*sub != *topic)
+                return false;
             sub++;
             topic++;
         }
-
-        if (*sub == '#' && *(sub + 1) == '\0') return true;
-
+        if (*sub == '#' && *(sub + 1) == '\0')
+            return true;
         return (*sub == '\0' && *topic == '\0');
     }
 
@@ -158,19 +232,30 @@ namespace ECL
                 sub.callback(topic, payload, length);
     }
 
-    inline void mqttPublish(const char *topic, const char *payload)
+    inline void publish(const char *topic, const char *payload)
     {
-        mqttClient.publish(topic, payload);
+#if defined(ECL_ESPNOW_ENABLE)
+        _eclMsgSeq++;
+        _markMsgSeen(_eclNodeId, _eclMsgSeq);
+        _espNowBroadcast(_eclNodeId, _eclMsgSeq, topic, payload);
+#endif
+
+#if defined(ECL_MQTT_SERVER)
+        if (mqttClient.connected())
+            mqttClient.publish(topic, payload);
+#endif
     }
 
     inline void mqttSubscribe(const char *topic, std::function<void(char *, byte *, unsigned int)> cb)
     {
         _eclMqttSubscriptions.push_back({topic, cb});
+#if defined(ECL_MQTT_SERVER)
         if (mqttClient.connected())
             mqttClient.subscribe(topic);
+#endif
     }
 
-    inline void mqttSubscribe(const char *topic, std::function<void(char *, char *)> cb)
+    inline void subscribe(const char *topic, std::function<void(char *, char *)> cb)
     {
         _eclMqttSubscriptions.push_back(
             {topic, [cb](char *t, byte *p, unsigned int len)
@@ -181,107 +266,197 @@ namespace ECL
                      payloadStr += (char)p[i];
                  cb(t, (char *)payloadStr.c_str());
              }});
-
+#if defined(ECL_MQTT_SERVER)
         if (mqttClient.connected())
             mqttClient.subscribe(topic);
+#endif
     }
 
+    inline void _mqttBrokerCallback(char *topic, byte *payload, unsigned int length)
+    {
+#if defined(ECL_MQTT_SERVER)
+        _mqttRoute(topic, payload, length);
+#endif
+#if defined(ECL_ESPNOW_GATEWAY) && defined(ECL_ESPNOW_ENABLE)
+        char payloadStr[170] = {0};
+        unsigned int cpLen = length < 169 ? length : 169;
+        memcpy(payloadStr, payload, cpLen);
+
+        _eclMsgSeq++;
+        _markMsgSeen(_eclNodeId, _eclMsgSeq);
+        _espNowBroadcast(_eclNodeId, _eclMsgSeq, topic, payloadStr);
+#endif
+    }
 #endif
 
-    // ========== INIT ==========
+#if defined(ECL_ESPNOW_ENABLE)
+    inline void _espNowOnRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
+    {
+        if (len != sizeof(EclEspNowMsg))
+            return;
+        EclEspNowMsg *msg = (EclEspNowMsg *)incomingData;
+
+        if (_isMsgSeen(msg->nodeId, msg->msgId))
+            return;
+
+        uint8_t nextHead = (_qHead + 1) % MAX_QUEUE_SIZE;
+        if (nextHead != _qTail)
+        {
+            _eclMsgQueue[_qHead].msg = *msg;
+            _eclMsgQueue[_qHead].processTime = millis() + random(10, 75); // spread in time a bit logs to prevent multiple broadcasts at the same time
+            _eclMsgQueue[_qHead].needsRebroadcast = true;
+
+#if defined(ECL_ESPNOW_GATEWAY) && defined(ECL_MQTT_SERVER)
+            _eclMsgQueue[_qHead].needsBroker = true;
+#else
+            _eclMsgQueue[_qHead].needsBroker = false;
+#endif
+            _qHead = nextHead;
+        }
+    }
+#endif
+
+    // --- Initialization ---
     inline void begin()
     {
+// Serial Setup
 #if defined(ECL_SERIAL_SPEED)
         Serial.begin(ECL_SERIAL_SPEED);
 #endif
 
-#if defined(ECL_WIFI_SSID)
-
-        ECL::log.printf("Connecting to WiFi: %s\n", ECL_WIFI_SSID);
-
+// WiFi Setup
+#if defined(ECL_WIFI_SSID) || defined(ECL_ESPNOW_ENABLE)
         WiFi.mode(WIFI_STA);
-        WiFi.begin((const char*)ECL_WIFI_SSID, (const char*)ECL_WIFI_PASSWORD);
-
-#if defined(ECL_OTA_HOSTNAME)
-    #if defined(ESP32)
-        WiFi.setHostname(ECL_OTA_HOSTNAME);
-    #elif defined(ESP8266)
-        WiFi.hostname(ECL_OTA_HOSTNAME);
-    #endif
+        WiFi.setSleep(false);
 #endif
 
+#if defined(ECL_WIFI_SSID)
+        ECL::log.printf("Connecting to WiFi: %s\n", ECL_WIFI_SSID);
+        WiFi.begin(ECL_WIFI_SSID, ECL_WIFI_PASSWORD);
+
+#if defined(ECL_OTA_HOSTNAME)
+        WiFi.setHostname(ECL_OTA_HOSTNAME);
+#endif
         while (WiFi.status() != WL_CONNECTED)
         {
             delay(500);
             Serial.print(".");
         }
-
         ECL::log.println("\nWiFi connected. IP: " + WiFi.localIP().toString());
-
+#elif defined(ECL_ESPNOW_ENABLE)
+        WiFi.disconnect();
 #endif
 
+// ESP-NOW Setup
+#if defined(ECL_ESPNOW_ENABLE)
+        if (esp_now_init() != ESP_OK)
+        {
+            ECL::log.println("Error initializing ESP-NOW");
+            return;
+        }
+
+#if defined(ECL_WIFI_SSID)
+        uint8_t channel = WiFi.channel();
+#else
+        uint8_t channel = ECL_WIFI_CHANNEL;
+        esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+#endif
+
+        _eclNodeId = esp_random();
+        esp_now_peer_info_t peerInfo;
+        memset(&peerInfo, 0, sizeof(peerInfo));
+        memcpy(peerInfo.peer_addr, _broadcastAddress, 6);
+        peerInfo.channel = channel;
+        peerInfo.encrypt = false; // TODO
+
+        if (esp_now_add_peer(&peerInfo) != ESP_OK)
+        {
+            ECL::log.println("Failed to add ESP-NOW peer");
+            return;
+        }
+
+        esp_now_register_recv_cb(_espNowOnRecv);
+        ECL::log.println("ESP-NOW Mesh Active.");
+#endif
+
+// Telnet Setup
 #if defined(ECL_TELNET_PORT)
         telnetServer.begin();
 #endif
 
+// Software Serial Setup
 #if defined(ECL_SOFTWARE_SERIAL_RX) && defined(ECL_SOFTWARE_SERIAL_TX)
         softwareSerial.begin(ECL_SOFTWARE_SERIAL_SPEED);
 #endif
 
-#if defined(ECL_MQTT_SERVER)
-        mqttClient.setServer(ECL_MQTT_SERVER, ECL_MQTT_PORT);
-        mqttClient.setCallback(_mqttRoute);
+// Hardware Serial Setup
+#if defined(ECL_HARDWARE_SERIAL_PORT) && defined(ECL_HARDWARE_SERIAL_RX) && defined(ECL_HARDWARE_SERIAL_TX)
+        hardwareSerial.begin(ECL_HARDWARE_SERIAL_SPEED, SERIAL_8N1, ECL_HARDWARE_SERIAL_RX, ECL_HARDWARE_SERIAL_TX);
 #endif
 
+// MQTT Setup
+#if defined(ECL_MQTT_SERVER)
+        mqttClient.setServer(ECL_MQTT_SERVER, ECL_MQTT_PORT);
+        mqttClient.setCallback(_mqttBrokerCallback);
+#endif
+// OTA Setup
 #if defined(ECL_OTA_HOSTNAME)
         ArduinoOTA.setHostname(ECL_OTA_HOSTNAME);
         ArduinoOTA.setPassword(ECL_OTA_PASSWORD);
-
-        ArduinoOTA.onStart([](){ ECL::log.println("OTA Start"); });
-        ArduinoOTA.onEnd([](){ ECL::log.println("\nOTA End"); });
+        ArduinoOTA.onStart([]()
+                           { ECL::log.println("OTA Start"); });
+        ArduinoOTA.onEnd([]()
+                         { ECL::log.println("\nOTA End"); });
         ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
-        {
-            ECL::log.printf("Progress: %u%%\r\n", (progress / (total / 100)));
-        });
+                              { ECL::log.printf("Progress: %u%%\r\n", (progress / (total / 100))); });
         ArduinoOTA.onError([](ota_error_t error)
-        {
-            ECL::log.printf("Error[%u]\n", error);
-        });
-
+                           { ECL::log.printf("Error[%u]\n", error); });
         ArduinoOTA.begin();
         ECL::log.println("OTA Ready");
 #endif
     }
 
-    // ========== LOOP ==========
+    // --- Loop Handler ---
     inline void loop()
     {
+// Handle ESP-NOW
+#if defined(ECL_ESPNOW_ENABLE)
+        while (_qTail != _qHead)
+        {
+            if (millis() >= _eclMsgQueue[_qTail].processTime)
+            {
+                EclEspNowMsg &m = _eclMsgQueue[_qTail].msg;
+                _mqttRoute(m.topic, (byte *)m.payload, strlen(m.payload));
+                if (_eclMsgQueue[_qTail].needsRebroadcast)
+                    _espNowBroadcast(m.nodeId, m.msgId, m.topic, m.payload);
+#if defined(ECL_ESPNOW_GATEWAY) && defined(ECL_MQTT_SERVER)
+                if (_eclMsgQueue[_qTail].needsBroker && mqttClient.connected())
+                    mqttClient.publish(m.topic, m.payload);
+#endif
+                _qTail = (_qTail + 1) % MAX_QUEUE_SIZE;
+            }
+            else
+                break;
+        }
+#endif
+// Handle OTA
 #if defined(ECL_OTA_HOSTNAME)
         ArduinoOTA.handle();
 #endif
 
+// Handle Telnet
 #if defined(ECL_TELNET_PORT)
-
-    #if defined(ESP32)
         if (telnetServer.hasClient())
             telnetClient = telnetServer.available();
-    #elif defined(ESP8266)
-        WiFiClient newClient = telnetServer.available();
-        if (newClient)
-            telnetClient = newClient;
-    #endif
-
 #endif
-
+// Handle MQTT Reconnection & Loop
 #if defined(ECL_MQTT_SERVER)
-
         if (!mqttClient.connected())
         {
             if (mqttClient.connect(ECL_MQTT_CLIENT))
             {
                 for (const auto &sub : _eclMqttSubscriptions)
                     mqttClient.subscribe(sub.topic.c_str());
-
                 ECL::log.println("MQTT Reconnected & Subscribed");
             }
         }
@@ -289,20 +464,19 @@ namespace ECL
         {
             mqttClient.loop();
         }
-
 #endif
-
         for (const auto &handler : _eclLoopHandlers)
             handler();
 
         unsigned long currentMillis = millis();
-
-        for (auto &timer : _eclTimers)
+        size_t numTimers = _eclTimers.size();
+        for (size_t i = 0; i < numTimers; i++)
         {
-            if (currentMillis - timer.lastRun >= timer.interval)
+            if (currentMillis - _eclTimers[i].lastRun >= _eclTimers[i].interval)
             {
-                timer.lastRun = currentMillis;
-                timer.callback();
+                _eclTimers[i].lastRun = currentMillis;
+                if (_eclTimers[i].callback)
+                    _eclTimers[i].callback();
             }
         }
     }
