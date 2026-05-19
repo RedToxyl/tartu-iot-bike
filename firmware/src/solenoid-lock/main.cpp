@@ -1,3 +1,5 @@
+#define ECL_ESPNOW_ENABLE
+
 #include "ECL.h"
 
 constexpr uint8_t RELAY_PIN = 32;
@@ -13,7 +15,7 @@ unsigned long unlockStart = 0;
 
 void publishState()
 {
-    ECL::mqttPublish(STATE_TOPIC, unlocked ? "unlocked" : "locked");
+    ECL::publish(STATE_TOPIC, unlocked ? "unlocked" : "locked");
 }
 
 void lock()
@@ -33,22 +35,23 @@ void unlock()
     publishState();
 }
 
+void onCmd(char *topic, char *payload)
+{
+    if (strcmp(payload, "unlock") == 0)
+        unlock();
+    else if (strcmp(payload, "lock") == 0)
+        lock();
+    else
+        ECL::log.printf("Solenoid: unknown command [%s]\n", payload);
+}
+
 void setup()
 {
     pinMode(RELAY_PIN, OUTPUT);
     digitalWrite(RELAY_PIN, RELAY_OFF);
 
     ECL::begin();
-
-    ECL::mqttSubscribe(CMD_TOPIC, [](char *topic, char *payload)
-    {
-        if (strcmp(payload, "unlock") == 0)
-            unlock();
-        else if (strcmp(payload, "lock") == 0)
-            lock();
-        else
-            ECL::log.printf("Solenoid: unknown command [%s]\n", payload);
-    });
+    ECL::subscribe(CMD_TOPIC, onCmd);
 }
 
 void loop()
