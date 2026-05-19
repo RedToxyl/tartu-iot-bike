@@ -54,19 +54,28 @@ def require_api_key(func):
         return func(*args, **kwargs)
     return wrapper
 
-def get_space_state(station_id, space_id):
-    conn = get_db()
-    with conn:
-        query = load_sql("get_space_state.sql")
-        row = conn.execute(query, {"id": space_id, "station": station_id}).fetchone()
-    conn.close()
-    return row  
-
 with app.app_context():
     valid_keys = load_api_keys()
     init_db()
     
 ## API ##
+
+@app.route("/api/space", methods=["POST"])
+def get_space_state():
+    data = request.json
+    station_id = data.get("station")
+    space_id = data.get("space")
+
+    conn = get_db()
+    with conn:
+        query = load_sql("get_space_state.sql")
+        row = conn.execute(query, {"id": space_id, "station": station_id}).fetchone()
+    conn.close()
+
+    if not row:
+        return {"error": "Space not found"}, 404
+    
+    return row  
 
 @app.route("/api/reset_db", methods=["POST"])
 @require_api_key

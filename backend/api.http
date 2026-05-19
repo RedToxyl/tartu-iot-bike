@@ -1,4 +1,5 @@
-@hostname = http://localhost:5000
+// @hostname = http://localhost:5000
+@hostname = https://iot.corebyte.ee
 
 ### Keep alive
 POST {{hostname}}/api/keep_alive
@@ -32,6 +33,14 @@ Accept: application/json
 GET {{hostname}}/api/stations
 Accept: application/json
 
+### Spaces
+POST {{hostname}}/api/space
+Content-Type: application/json
+
+{
+  "station": "0",
+  "space": "A"
+}
 
 ### Create station
 POST {{hostname}}/api/create_station
