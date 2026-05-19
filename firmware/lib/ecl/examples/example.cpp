@@ -22,7 +22,7 @@
 
 ECL::Button btn(17);
 
-void mqttCallback(char *topic, char *payload)
+void eventCallback(char *topic, char *payload)
 {
     ECL::log.printf("Received on [%s]: %s", topic, payload); // printf via Serial & Telnet
     softwareSerial.println(payload);                         // println via softwareSerial
@@ -32,13 +32,13 @@ void onBtnClick()
 {
     static bool alarm = false;
     ECL::log.println("Button is pressed!");
-    ECL::mqttPublish("security/alarm", (alarm = !alarm) ? "on" : "off");
+    ECL::publish("security/alarm", (alarm = !alarm) ? "on" : "off");
 }
 
 void setup()
 {
     ECL::begin(); // initializes OTA, MQTT, Telnet
-    ECL::mqttSubscribe("prison/#", mqttCallback);
+    ECL::subscribe("prison/#", eventCallback);
     btn.setOnPress(onBtnClick); // handles initialization and integration into ECL loop
     ECL::setInterval(3000, [](){ ECL::log.println("Timer!"); }); // invoke every 3000ms
 }
