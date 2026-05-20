@@ -7,6 +7,8 @@
 #define SS_PIN  5
 #define RST_PIN 27
 
+#define SPACE_ID 0
+
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 void setup()
@@ -36,7 +38,7 @@ void loop()
     ECL::log.print("Card UID: ");
     ECL::log.println(uidStr);
 
-    ECL::publish("sensor/rfid", uidStr.c_str());
+    ECL::publish("space/" + String(SPACE_ID) + "/rfid", uidStr.c_str());
 
     mfrc522.PICC_HaltA();
     delay(500);
