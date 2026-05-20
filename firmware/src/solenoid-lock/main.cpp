@@ -2,13 +2,13 @@
 
 #include "ECL.h"
 
-constexpr uint8_t RELAY_PIN = 32;
+constexpr uint8_t RELAY_PIN = D5;
 constexpr uint8_t RELAY_ON = LOW;
 constexpr uint8_t RELAY_OFF = HIGH;
 constexpr unsigned long MAX_UNLOCK_MS = 15000;
 
-constexpr const char *CMD_TOPIC = "bike/lock/cmd";
-constexpr const char *STATE_TOPIC = "bike/lock/state";
+constexpr const char* CMD_TOPIC = "space/" + String(SPACE_ID) + "/bike"
+constexpr const char* STATE_TOPIC = CMD_TOPIC + "/state";
 
 bool unlocked = false;
 unsigned long unlockStart = 0;

@@ -8,69 +8,44 @@
 // =========================
 // CONFIG
 // =========================
-
-static const char *HOSTNAME = "https://iot.corebyte.ee";
-
-static constexpr float LAT = 58.3776;
-static constexpr float LON = 26.7290;
-
-static const char *STATION_NAME = "Delta Station";
-
 static constexpr int N_SPACES = 5;
 static constexpr int BIKE_TAKEOUT_TIME = 5000;
+static constexpr int MAX_ACCESS_DELAY = 10000;
 
 // =========================
 // GLOBALS
 // =========================
+struct Space{
+    String id;
+    bool bikePresent;
+    int last_access_attempt_time;
+    String last_access_attempt_rfid;
+}
 
-String stationId;
+String stationId = STATION_ID
 
-bool spaces[N_SPACES];
+Space spaces[N_SPACES];
 
-// =========================
-// FORWARD DECLARATIONS
-// =========================
-
-// setup helpers
-void initializeSpaces();
-
-// MQTT/event handlers
-void update_space(char *topic, char *payload);
-void user_requests_space(char *topic, char *payload);
-
-// parsing
-int topicToSpaceId(const char *topic);
-
-// API
-bool apiPost(const char *endpoint, const String &payload, String &response);
-
-JsonDocument getSpaceState(const char *station, const char *space);
-
-int keepAlive(const char *id);
-
-int createStation(
-    const char *id,
-    const char *name,
-    float lat,
-    float lon);
-
-int createSpace(
-    const char *station,
-    const char *space);
-
-int lockSpace(
-    const char *station,
-    const char *space,
-    const char *rfid);
-
-int unlockSpace(
-    const char *station,
-    const char *space,
-    const char *rfid);
-
-// =========================
 // SETUP
 // =========================
+
+void initializeSpaces()
+{
+    for (int i = 0; i < N_SPACES; i++)
+    {
+        String spaceId = String(i);
+
+
+        ECL::publish("api/create_space", "\"station\": \"" + stationId + "\", \"space\": \"" + spaceId + "\"");
+        spaces[i] = {spaceId, false, 0, ""};
+    }
+}
+
+void initalizeHandlers(){
+    ECL::subscribe("api/return/#", validate_access);
+    ECL::subscribe("space/#/bike", update_space);
+    ECL::subscribe("space/#/rfid", attempt_access);
+}
 
 void setup()
 {
@@ -83,13 +58,9 @@ void setup()
     ECL::log.printf(
         "My MAC address is [%s]\n",
         stationId.c_str());
-
-    createStation(
-        stationId.c_str(),
-        STATION_NAME,
-        LAT,
-        LON);
-
+    ECL::subscribe("space");
+    ECL::subscribe("api")
+    ECL::publish('api/create_station', "\"station\": \"" + stationId + "\", \"name\": \"" + STATION_NAME + "\", \"lat\": " + String(LATITUDE) + ", \"lon\": " + String(LONGITUDE) + "\"");
     initializeSpaces();
 }
 
@@ -100,28 +71,9 @@ void setup()
 void loop()
 {
     ECL::loop();
-
-    keepAlive(stationId.c_str());
+    ECL::publish('api/keep_alive', stationId.c_str());
 
     delay(1000);
-}
-
-// =========================
-// INITIALIZATION
-// =========================
-
-void initializeSpaces()
-{
-    for (int i = 0; i < N_SPACES; i++)
-    {
-        String spaceId = String(i);
-
-        createSpace(
-            stationId.c_str(),
-            spaceId.c_str());
-
-        spaces[i] = false;
-    }
 }
 
 // =========================
@@ -149,47 +101,8 @@ int topicToSpaceId(const char *topic)
 // =========================
 // EVENT HANDLERS
 // =========================
-
-void update_space(char *topic, char *payload)
-{
-    int spaceId = topicToSpaceId(topic);
-
-    bool bikePresent =
-        String(payload) == "present";
-
-    if (spaceId >= 0 && spaceId < N_SPACES)
-    {
-        spaces[spaceId] = bikePresent;
-    }
-}
-
-void user_requests_space(char *topic, char *payload)
-{
-    String rfid(payload);
-
-    int spaceId = topicToSpaceId(topic);
-
-    ECL::log.printf(
-        "Request for space %d from RFID %s\n",
-        spaceId,
-        rfid.c_str());
-
+void allow_access(int spaceId){ // called when a valid rfid was presented and the server responded in time
     String spaceStr = String(spaceId);
-
-    JsonDocument spaceState =
-        getSpaceState(
-            stationId.c_str(),
-            spaceStr.c_str());
-
-    // authorization check
-    if (spaceState["rfid"] != rfid)
-    {
-        ECL::log.println(
-            "Unauthorized RFID access");
-
-        return;
-    }
-
     // unlock
     ECL::publish(
         "space/" + spaceStr + "/solenoid",
@@ -205,198 +118,79 @@ void user_requests_space(char *topic, char *payload)
     // update backend
     if (spaceId >= 0 &&
         spaceId < N_SPACES &&
-        spaces[spaceId])
+        spaces[spaceId].bikePresent) // we're doing it this way so that bike-detection has a purpose
     {
-        lockSpace(
-            stationId.c_str(),
-            spaceStr.c_str(),
-            rfid.c_str());
-
+        ECL::publish('api/lock', "\"station\": \"" + stationId + "\", \"space\": \"" + spaceStr + "\", \"rfid\": \"" + rfid + "\"");
         ECL::log.println(
             "Bike detected -> locked");
     }
     else
     {
-        unlockSpace(
-            stationId.c_str(),
-            spaceStr.c_str(),
-            rfid.c_str());
-
+        ECL::publish('api/unlock', "\"station\": \"" + stationId + "\", \"space\": \"" + spaceStr + "\", \"rfid\": \"" + rfid + "\"");
         ECL::log.println(
             "No bike -> unlocked");
     }
 }
 
-// =========================
-// HTTP HELPERS
-// =========================
 
-bool apiPost(
-    const char *endpoint,
-    const String &payload,
-    String &response)
+void validate_access(char *topic, char *payload) // called when the server responds with the stored rfid for a space
 {
-    HTTPClient http;
+    JsonDocument spaceState;
+    deserializeJson(spaceState, payload);
 
-    http.begin(
-        String(HOSTNAME) + endpoint);
+    int spaceId = spaceState["s.id"].as<int>();
+    const char *rfid = spaceState["e.rfid"].as<const char *>();
 
-    http.addHeader(
-        "Content-Type",
-        "application/json");
+    if (spaceId >= 0 && spaceId < N_SPACES)
+    {
+        int currentTime = millis();
 
-    http.addHeader(
-        "Authorization",
-        TOKEN1);
+        // keeping this in requires some extra counter, otherwise it loops forever
+        /*if (currentTime - spaces[spaceId].last_access_attempt_time > MAX_ACCESS_DELAY) 
+        {
+            attempt_access(topic, payload);
+        }*/
 
-    int httpCode =
-        http.POST(payload);
-
-    response = http.getString();
-
-    http.end();
-
-    return httpCode > 0;
+        if (currentTime - spaces[spaceId].last_access_attempt_time <= MAX_ACCESS_DELAY){ // still up to date
+            if (strcmp(rfid, spaces[spaceId].last_access_attempt_rfid.c_str()) == 0){ // rfid matches db
+                allow_access(spaceId);
+            }
+            else {
+                ECL::log.println("RFID not authorized for this space");
+            }
+        }
+    }
 }
 
-// =========================
-// API
-// =========================
-
-JsonDocument getSpaceState(
-    const char *station,
-    const char *space)
+void attempt_access(char *topic, char *payload) // called when the user presents rfid
 {
-    DynamicJsonDocument doc(1024);
+    int spaceId = topicToSpaceId(topic);
+    String rfid(payload);
 
-    String response;
+    if (spaceId >= 0 && spaceId < N_SPACES)
+    {
+        spaces[spaceId].last_access_attempt_time = millis();
+        spaces[spaceId].last_access_attempt_rfid = String(payload);
+    }
+ 
+    ECL::publish('api/space', "\"station\": \"" + stationId + "\", \"space\": \"" + spaceStr + "\"");
 
-    String payload =
-        "{\"station\":\"" +
-        String(station) +
-        "\",\"space\":\"" +
-        String(space) +
-        "\"}";
-
-    apiPost(
-        "/api/space",
-        payload,
-        response);
-
-    deserializeJson(doc, response);
-
-    return doc;
+    ECL::log.printf(
+        "Request for space %d from RFID %s\n",
+        spaceId,
+        rfid.c_str());
 }
 
-int keepAlive(const char *id)
+
+void update_space(char *topic, char *payload)
 {
-    String response;
+    int spaceId = topicToSpaceId(topic);
 
-    String payload =
-        "{\"id\":\"" +
-        String(id) +
-        "\"}";
+    bool bikePresent =
+        String(payload) == "present";
 
-    apiPost(
-        "/api/keep_alive",
-        payload,
-        response);
-
-    return 0;
-}
-
-int createStation(
-    const char *id,
-    const char *name,
-    float lat,
-    float lon)
-{
-    String response;
-
-    String payload =
-        "{\"id\":\"" +
-        String(id) +
-        "\",\"name\":\"" +
-        String(name) +
-        "\",\"lat\":" +
-        String(lat) +
-        ",\"lon\":" +
-        String(lon) +
-        "}";
-
-    apiPost(
-        "/api/create_station",
-        payload,
-        response);
-
-    return 0;
-}
-
-int createSpace(
-    const char *station,
-    const char *space)
-{
-    String response;
-
-    String payload =
-        "{\"station\":\"" +
-        String(station) +
-        "\",\"space\":\"" +
-        String(space) +
-        "\"}";
-
-    apiPost(
-        "/api/create_space",
-        payload,
-        response);
-
-    return 0;
-}
-
-int lockSpace(
-    const char *station,
-    const char *space,
-    const char *rfid)
-{
-    String response;
-
-    String payload =
-        "{\"station\":\"" +
-        String(station) +
-        "\",\"space\":\"" +
-        String(space) +
-        "\",\"rfid\":\"" +
-        String(rfid) +
-        "\"}";
-
-    apiPost(
-        "/api/lock",
-        payload,
-        response);
-
-    return 0;
-}
-
-int unlockSpace(
-    const char *station,
-    const char *space,
-    const char *rfid)
-{
-    String response;
-
-    String payload =
-        "{\"station\":\"" +
-        String(station) +
-        "\",\"space\":\"" +
-        String(space) +
-        "\",\"rfid\":\"" +
-        String(rfid) +
-        "\"}";
-
-    apiPost(
-        "/api/unlock",
-        payload,
-        response);
-
-    return 0;
+    if (spaceId >= 0 && spaceId < N_SPACES)
+    {
+        spaces[spaceId].bikePresent = bikePresent;
+    }
 }

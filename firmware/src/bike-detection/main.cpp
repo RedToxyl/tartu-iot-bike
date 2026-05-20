@@ -10,6 +10,8 @@
 #define BIKE_CHECK_DURATION 2500 // in ms
 #define BIKE_CHECK_INTERVAL 500 // in ms
 
+#define SPACE_ID 0
+
 NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean has_bike() {
@@ -24,7 +26,7 @@ boolean has_bike() {
 
 void check_for_bike() {
     bool bike_present = has_bike();
-    ECL::publish("space/0/result", bike_present ? "present" : "absent");
+    ECL::publish("space/" + String(SPACE_ID) + "/bike", bike_present ? "present" : "absent");
 }
 
 void setup()
