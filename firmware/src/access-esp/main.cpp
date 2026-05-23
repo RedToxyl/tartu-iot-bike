@@ -160,6 +160,9 @@ void validate_access(char *topic, char *payload) // called when the server respo
             if (strcmp(rfid, spaces[spaceId].last_access_attempt_rfid.c_str()) == 0){ // rfid matches db
                 allow_access(spaceId);
             }
+            else if (strcmp(rfid, "ACCESS-FREE") == 0) {
+                allow_access(spaceId);
+            }
             else {
                 ECL::log.println("RFID not authorized for this space");
             }
