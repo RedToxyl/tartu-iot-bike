@@ -1,4 +1,4 @@
-// #define ECL_ESPNOW_ENABLE
+#define ECL_ESPNOW_ENABLE
 
 #include "ECL.h"
 
