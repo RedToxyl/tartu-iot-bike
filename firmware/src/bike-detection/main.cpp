@@ -27,9 +27,10 @@ boolean has_bike() {
 void check_for_bike() {
     bool bike_present = has_bike();
     String topic = "space/" + String(SPACE_ID) + "/bike";
+    String payload = bike_present ? "present" : "absent"
 
-    ECL::publish(topic.c_str(), bike_present ? "present" : "absent");
-    ECL::log.println(bike_present ? "present" : "absent");
+    ECL::publish(topic.c_str(), payload.c_str());
+    ECL::log.println(topic.c_str() + ": " + payload.c_str());
 }
 
 void setup()
