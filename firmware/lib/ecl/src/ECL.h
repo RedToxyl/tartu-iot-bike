@@ -95,9 +95,11 @@ struct EclEspNowMsg
 {
     uint32_t nodeId;
     uint32_t msgId;
+    uint8_t ttl;
     char topic[64];
-    char payload[170];
-};
+    char payload[169];
+} __attribute__((packed));
+
 struct EclMsgQueueItem
 {
     EclEspNowMsg msg;
@@ -106,6 +108,7 @@ struct EclMsgQueueItem
     bool needsBroker;
 };
 
+const int MAX_HOPS = 5;
 const int MAX_QUEUE_SIZE = 15;
 EclMsgQueueItem _eclMsgQueue[MAX_QUEUE_SIZE];
 uint8_t _qHead = 0;
@@ -114,7 +117,7 @@ uint8_t _qTail = 0;
 uint32_t _eclNodeId = 0;
 uint32_t _eclMsgSeq = 0;
 const int MAX_SEEN_MSGS = 30;
-uint32_t _seenMsgs[MAX_SEEN_MSGS];
+uint64_t _seenMsgs[MAX_SEEN_MSGS];
 uint8_t _seenMsgIdx = 0;
 uint8_t _broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -136,8 +139,11 @@ void _markMsgSeen(uint32_t nId, uint32_t mId)
     _seenMsgIdx = (_seenMsgIdx + 1) % MAX_SEEN_MSGS;
 }
 
-void _espNowBroadcast(uint32_t nId, uint32_t mId, const char *topic, const char *payload)
+void _espNowBroadcast(uint32_t nId, uint32_t mId, uint8_t ttl, const char *topic, const char *payload)
 {
+    if (ttl == 0)
+        return;
+
     EclEspNowMsg msg;
     msg.nodeId = nId;
     msg.msgId = mId;
@@ -246,7 +252,7 @@ namespace ECL
 #if defined(ECL_ESPNOW_ENABLE)
         _eclMsgSeq++;
         _markMsgSeen(_eclNodeId, _eclMsgSeq);
-        _espNowBroadcast(_eclNodeId, _eclMsgSeq, topic, payload);
+        _espNowBroadcast(_eclNodeId, _eclMsgSeq, MAX_HOPS, topic, payload);
 #endif
 
 #if defined(ECL_MQTT_SERVER)
@@ -293,7 +299,7 @@ namespace ECL
 
         _eclMsgSeq++;
         _markMsgSeen(_eclNodeId, _eclMsgSeq);
-        _espNowBroadcast(_eclNodeId, _eclMsgSeq, topic, payloadStr);
+        _espNowBroadcast(_eclNodeId, _eclMsgSeq, MAX_HOPS, topic, payloadStr);
 #endif
     }
 #endif
@@ -319,7 +325,7 @@ namespace ECL
         {
             _eclMsgQueue[_qHead].msg = *msg;
             _eclMsgQueue[_qHead].processTime = millis() + random(10, 75); // spread in time a bit logs to prevent multiple broadcasts at the same time
-            _eclMsgQueue[_qHead].needsRebroadcast = true;
+            _eclMsgQueue[_qHead].needsRebroadcast = (msg->ttl > 1);
 
 #if defined(ECL_ESPNOW_GATEWAY) && defined(ECL_MQTT_SERVER)
             _eclMsgQueue[_qHead].needsBroker = true;
@@ -368,8 +374,7 @@ namespace ECL
 
 // ESP-NOW Setup
 #if defined(ECL_ESPNOW_ENABLE)
-
-        if (esp_now_init() != 0)
+        if (esp_now_init() != ESP_OK)
         {
             ECL::log.println("Error initializing ESP-NOW");
             return;
@@ -462,7 +467,7 @@ namespace ECL
                 EclEspNowMsg &m = _eclMsgQueue[_qTail].msg;
                 _mqttRoute(m.topic, (byte *)m.payload, strlen(m.payload));
                 if (_eclMsgQueue[_qTail].needsRebroadcast)
-                    _espNowBroadcast(m.nodeId, m.msgId, m.topic, m.payload);
+                    _espNowBroadcast(m.nodeId, m.msgId, m.ttl - 1, m.topic, m.payload);
 #if defined(ECL_ESPNOW_GATEWAY) && defined(ECL_MQTT_SERVER)
                 if (_eclMsgQueue[_qTail].needsBroker && mqttClient.connected())
                     mqttClient.publish(m.topic, m.payload);
