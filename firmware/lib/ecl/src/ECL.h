@@ -299,7 +299,11 @@ namespace ECL
 #endif
 
 #if defined(ECL_ESPNOW_ENABLE)
+#if defined(ESP32)
     inline void _espNowOnRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
+#elif defined(ESP8266)
+    inline void _espNowOnRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len)
+#endif
     {
         if (len != sizeof(EclEspNowMsg))
             return;
@@ -338,7 +342,11 @@ namespace ECL
 // WiFi Setup
 #if defined(ECL_WIFI_SSID) || defined(ECL_ESPNOW_ENABLE)
         WiFi.mode(WIFI_STA);
+#if defined(ESP32)
         WiFi.setSleep(false);
+#elif defined(ESP8266)
+        WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#endif
 #endif
 
 #if defined(ECL_WIFI_SSID)
@@ -370,9 +378,14 @@ namespace ECL
         uint8_t channel = WiFi.channel();
 #else
         uint8_t channel = ECL_WIFI_CHANNEL;
+#if defined(ESP32)
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+#elif defined(ESP8266)
+        wifi_set_channel(channel);
+#endif
 #endif
 
+#if defined(ESP32)
         _eclNodeId = esp_random();
         esp_now_peer_info_t peerInfo;
         memset(&peerInfo, 0, sizeof(peerInfo));
@@ -385,7 +398,16 @@ namespace ECL
             ECL::log.println("Failed to add ESP-NOW peer");
             return;
         }
+#elif defined(ESP8266)
+        _eclNodeId = os_random(); // ESP8266 equivalent of esp_random()
+        esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
 
+        if (esp_now_add_peer(_broadcastAddress, ESP_NOW_ROLE_COMBO, channel, NULL, 0) != 0)
+        {
+            ECL::log.println("Failed to add ESP-NOW peer");
+            return;
+        }
+#endif
         esp_now_register_recv_cb(_espNowOnRecv);
         ECL::log.println("ESP-NOW Mesh Active.");
 #endif
