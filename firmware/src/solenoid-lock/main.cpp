@@ -7,8 +7,8 @@ constexpr uint8_t RELAY_ON = LOW;
 constexpr uint8_t RELAY_OFF = HIGH;
 constexpr unsigned long MAX_UNLOCK_MS = 15000;
 
-constexpr const char* CMD_TOPIC = "space/" + String(SPACE_ID) + "/bike"
-constexpr const char* STATE_TOPIC = CMD_TOPIC + "/state";
+constexpr const char* CMD_TOPIC = "space/" SPACE_ID "/bike";
+constexpr const char* STATE_TOPIC = "space/" SPACE_ID "/bike/state";
 
 bool unlocked = false;
 unsigned long unlockStart = 0;
