@@ -66,6 +66,9 @@ def get_space_state():
     station_id = data.get("station")
     space_id = data.get("space")
 
+    return _get_space_state(station_id, space_id)
+
+def _get_space_state(station_id, space_id):
     conn = get_db()
     with conn:
         query = load_sql("get_space_state.sql")
@@ -75,7 +78,7 @@ def get_space_state():
     if not row:
         return {"error": "Space not found"}, 404
     
-    return row  
+    return row 
 
 @app.route("/api/reset_db", methods=["POST"])
 @require_api_key
@@ -166,7 +169,7 @@ def create_station():
 def create_space():
     data = request.json
 
-    space_state = get_space_state(data["station"], data["space"])
+    space_state = _get_space_state(data["station"], data["space"])
     if space_state and space_state["state"] != "deleted":
         return {"error": "Space already exists"}, 400
 
@@ -204,7 +207,7 @@ def create_space():
 def delete_space():
     data = request.json
 
-    space_state = get_space_state(data["station"], data["space"])
+    space_state = _get_space_state(data["station"], data["space"])
     if not space_state:
         return {"error": "Space not found"}, 404
     elif space_state["state"] == "deleted":
@@ -252,7 +255,7 @@ def keep_alive():
 def unlock():
     data = request.json
 
-    space_state = get_space_state(data["station"], data["space"])
+    space_state = _get_space_state(data["station"], data["space"])
     if not space_state:
         return {"error": "Space not found"}, 404
     elif space_state["state"] == "free":
@@ -288,7 +291,7 @@ def unlock():
 def lock():
     data = request.json
 
-    space_state = get_space_state(data["station"], data["space"])
+    space_state = _get_space_state(data["station"], data["space"])
     if not space_state:
         return {"error": "Space not found"}, 404
     elif space_state["state"] == "used":

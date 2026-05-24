@@ -1,4 +1,4 @@
-// #define ECL_ESPNOW_ENABLE
+#define ECL_ESPNOW_ENABLE
 
 #include "ECL.h"
 #include <HTTPClient.h>
@@ -40,21 +40,22 @@ void initializeSpaces()
         String spaceId = String(i);
         String createSpacePayload = "\"station\": \"" + stationId + "\", \"space\": \"" + spaceId + "\"";
         ECL::publish("api/create_space", createSpacePayload.c_str());
+        ECL::log.printf("PUBLISH %s %s\n", "api/create_space", createSpacePayload.c_str());
         spaces[i] = {spaceId, false, 0, ""};
     }
 }
 
 void initializeHandlers(){
     ECL::subscribe("api/return/#", validate_access);
-    ECL::subscribe("space/#/bike", update_space);
-    ECL::subscribe("space/#/rfid", attempt_access);
+    ECL::subscribe("space/+/bike", update_space);
+    ECL::subscribe("space/+/rfid", attempt_access);
 };
 
 void setup()
 {
     ECL::begin();
 
-    delay(2000);
+    delay(500);
 
     stationId = WiFi.macAddress();
 
@@ -64,6 +65,7 @@ void setup()
     initializeHandlers();
     String createStationPayload = "\"station\": \"" + stationId + "\", \"name\": \"" + STATION_NAME + "\", \"lat\": " + String(LATITUDE) + ", \"lon\": " + String(LONGITUDE) + "\"";
     ECL::publish("api/create_station", createStationPayload.c_str());
+    ECL::log.printf("PUBLISH %s %s\n", "api/create_station", createStationPayload.c_str());
     initializeSpaces();
 }
 
@@ -74,7 +76,9 @@ void setup()
 void loop()
 {
     ECL::loop();
+    
     ECL::publish("api/keep_alive", stationId.c_str());
+    ECL::log.printf("PUBLISH %s %s\n", "api/keep_alive", stationId.c_str());
 
     delay(1000);
 }
@@ -108,11 +112,13 @@ void allow_access(int spaceId){ // called when a valid rfid was presented and th
     String spaceStr = String(spaceId);
     String unlockTopic = "space/" + spaceStr + "/solenoid";
     ECL::publish(unlockTopic.c_str(), "unlock");
+    ECL::log.printf("PUBLISH %s %s\n", unlockTopic.c_str(), "unlock");
 
     delay(BIKE_TAKEOUT_TIME);
 
     String lockTopic = "space/" + spaceStr + "/solenoid";
     ECL::publish(lockTopic.c_str(), "lock");
+    ECL::log.printf("PUBLISH %s %s\n", lockTopic.c_str(), "lock");
 
     // update backend
     String attemptRfid = "";
@@ -127,12 +133,14 @@ void allow_access(int spaceId){ // called when a valid rfid was presented and th
         spaces[spaceId].bikePresent) // we're doing it this way so that bike-detection has a purpose
     {
         ECL::publish("api/lock", payload.c_str());
+        ECL::log.printf("PUBLISH %s %s\n", "api/lock", payload.c_str());
         ECL::log.println(
             "Bike detected -> locked");
     }
     else
     {
         ECL::publish("api/unlock", payload.c_str());
+        ECL::log.printf("PUBLISH %s %s\n", "api/unlock", payload.c_str());
         ECL::log.println(
             "No bike -> unlocked");
     }
@@ -184,6 +192,7 @@ void attempt_access(char *topic, char *payload) // called when the user presents
  
     String payloadStr = "\"station\": \"" + stationId + "\", \"space\": \"" + spaceStr + "\"";
     ECL::publish("api/space", payloadStr.c_str());
+    ECL::log.printf("PUBLISH %s %s\n", "api/space", payloadStr.c_str());
 
     ECL::log.printf(
         "Request for space %d from RFID %s\n",
