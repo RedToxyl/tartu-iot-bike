@@ -25,16 +25,16 @@
 // ========== WIFI GLOBALS ==========
 #if defined(ECL_WIFI_SSID) || defined(ECL_ESPNOW_ENABLE)
 #if defined(ESP32)
-  #include <WiFi.h>
+#include <WiFi.h>
 #elif defined(ESP8266)
-  #include <ESP8266WiFi.h>
+#include <ESP8266WiFi.h>
 #endif
 #ifndef ECL_WIFI_PASSWORD
 #define ECL_WIFI_PASSWORD "iotempire"
 #endif
 WiFiClient wifiClient;
 #ifndef ECL_WIFI_CHANNEL
-#define ECL_WIFI_CHANNEL 1 
+#define ECL_WIFI_CHANNEL 1
 #endif
 #endif
 
@@ -84,8 +84,12 @@ PubSubClient mqttClient(wifiClient);
 
 // ========== ESP-NOW MESH GLOBALS ==========
 #if defined(ECL_ESPNOW_ENABLE)
-#include <esp_now.h>
+#if defined(ESP32)
 #include <esp_wifi.h>
+#include <esp_now.h>
+#elif defined(ESP8266)
+#include <espnow.h>
+#endif
 
 struct EclEspNowMsg
 {
