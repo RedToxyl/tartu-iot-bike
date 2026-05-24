@@ -24,7 +24,11 @@
 
 // ========== WIFI GLOBALS ==========
 #if defined(ECL_WIFI_SSID) || defined(ECL_ESPNOW_ENABLE)
-#include <WiFi.h>
+#if defined(ESP32)
+  #include <WiFi.h>
+#elif defined(ESP8266)
+  #include <ESP8266WiFi.h>
+#endif
 #ifndef ECL_WIFI_PASSWORD
 #define ECL_WIFI_PASSWORD "iotempire"
 #endif

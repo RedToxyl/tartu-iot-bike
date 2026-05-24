@@ -192,7 +192,7 @@ def create_space():
             "space": data["space"],
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "create",
-            "rfid": None,
+            "rfid": "ACCESS-FREE",
         })
     
     conn.close()
@@ -277,7 +277,7 @@ def unlock():
             "space": data["space"],
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "unlock",
-            "rfid": data["rfid"],
+            "rfid": "ACCESS-FREE",
         })
         
     conn.close()
