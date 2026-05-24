@@ -16,8 +16,7 @@ NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean has_bike() {
     for (int i = 0; i < BIKE_CHECK_DURATION / BIKE_CHECK_INTERVAL; i++) {
-        ECL::log.println(itoa(sonar.ping_cm()));
-        if (sonar.ping_cm() > EXPECTED_BIKE_DISTANCE) {
+        if (sonar.ping_cm() != 0 && sonar.ping_cm() > EXPECTED_BIKE_DISTANCE) {
             return false;
         }
         delay(BIKE_CHECK_INTERVAL);
