@@ -1,17 +1,17 @@
 #define ECL_ESPNOW_ENABLE
 
-#include "ECL.h"
+#include "ECL8266.h"
 
 constexpr uint8_t RELAY_PIN = D5;
 constexpr uint8_t RELAY_ON = LOW;
 constexpr uint8_t RELAY_OFF = HIGH;
-constexpr unsigned long MAX_UNLOCK_MS = 15000;
+constexpr unsigned long MAX_LOCK_MS = 15000;
 
-constexpr const char* CMD_TOPIC = "space/" SPACE_ID "/bike";
-constexpr const char* STATE_TOPIC = "space/" SPACE_ID "/bike/state";
+constexpr const char* CMD_TOPIC = "space/" SPACE_ID "/solenoid";
+constexpr const char* STATE_TOPIC = "space/" SPACE_ID "/solenoid/state";
 
-bool unlocked = false;
-unsigned long unlockStart = 0;
+bool locked = false;
+unsigned long lockStart = 0;
 
 void publishState()
 {
@@ -21,7 +21,8 @@ void publishState()
 void lock()
 {
     digitalWrite(RELAY_PIN, RELAY_OFF);
-    unlocked = false;
+    locked = true;
+    lockStart = millis();
     ECL::log.println("Solenoid: locked");
     publishState();
 }
@@ -29,8 +30,7 @@ void lock()
 void unlock()
 {
     digitalWrite(RELAY_PIN, RELAY_ON);
-    unlocked = true;
-    unlockStart = millis();
+    locked = false;
     ECL::log.println("Solenoid: unlocked");
     publishState();
 }
@@ -59,9 +59,9 @@ void loop()
     ECL::loop();
 
     // avoid overheating the lock
-    if (unlocked && millis() - unlockStart >= MAX_UNLOCK_MS)
+    if (locked && millis() - lockStart >= MAX_LOCK_MS)
     {
-        ECL::log.println("Solenoid: unlock timeout reached, forcing lock");
-        lock();
+        ECL::log.println("Solenoid: lock timeout reached, forcing lock");
+        unlock();
     }
 }
