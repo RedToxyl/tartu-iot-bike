@@ -1,9 +1,9 @@
+// #define ECL_ESPNOW_ENABLE
+
 #include "ECL.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "keys.h"
-
-#define ECL_ESPNOW_ENABLE
 
 // =========================
 // CONFIG
