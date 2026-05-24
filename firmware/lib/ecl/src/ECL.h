@@ -368,7 +368,8 @@ namespace ECL
 
 // ESP-NOW Setup
 #if defined(ECL_ESPNOW_ENABLE)
-        if (esp_now_init() != ESP_OK)
+
+        if (esp_now_init() != 0)
         {
             ECL::log.println("Error initializing ESP-NOW");
             return;
