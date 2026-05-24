@@ -303,39 +303,6 @@ namespace ECL
 #endif
     }
 #endif
-/*
-#if defined(ECL_ESPNOW_ENABLE)
-#if defined(ESP32)
-    inline void _espNowOnRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
-#elif defined(ESP8266)
-    inline void _espNowOnRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len)
-#endif
-    {
-        if (len != sizeof(EclEspNowMsg))
-            return;
-        EclEspNowMsg *msg = (EclEspNowMsg *)incomingData;
-
-        if (_isMsgSeen(msg->nodeId, msg->msgId))
-            return;
-
-        _markMsgSeen(msg->nodeId, msg->msgId);
-
-        uint8_t nextHead = (_qHead + 1) % MAX_QUEUE_SIZE;
-        if (nextHead != _qTail)
-        {
-            _eclMsgQueue[_qHead].msg = *msg;
-            _eclMsgQueue[_qHead].processTime = millis() + random(10, 75); // spread in time a bit logs to prevent multiple broadcasts at the same time
-            _eclMsgQueue[_qHead].needsRebroadcast = (msg->ttl > 1);
-
-#if defined(ECL_ESPNOW_GATEWAY) && defined(ECL_MQTT_SERVER)
-            _eclMsgQueue[_qHead].needsBroker = true;
-#else
-            _eclMsgQueue[_qHead].needsBroker = false;
-#endif
-            _qHead = nextHead;
-        }
-    }
-#endif*/
 
 #if defined(ECL_ESPNOW_ENABLE)
 #if defined(ESP32)

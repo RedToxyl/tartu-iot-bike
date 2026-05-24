@@ -15,7 +15,8 @@ static constexpr int MAX_ACCESS_DELAY = 10000;
 // =========================
 // GLOBALS
 // =========================
-struct Space{
+struct Space
+{
     String id;
     bool bikePresent;
     int last_access_attempt_time;
@@ -45,17 +46,22 @@ void initializeSpaces()
     }
 }
 
-void initializeHandlers(){
+void initializeHandlers()
+{
     ECL::subscribe("api/return/#", validate_access);
     ECL::subscribe("space/+/bike", update_space);
     ECL::subscribe("space/+/rfid", attempt_access);
 };
 
+void keepAlive()
+{
+    ECL::publish("api/keep_alive", stationId.c_str());
+    ECL::log.printf("PUBLISH %s %s\n", "api/keep_alive", stationId.c_str());
+}
+
 void setup()
 {
     ECL::begin();
-
-    delay(500);
 
     stationId = WiFi.macAddress();
 
@@ -67,6 +73,8 @@ void setup()
     ECL::publish("api/create_station", createStationPayload.c_str());
     ECL::log.printf("PUBLISH %s %s\n", "api/create_station", createStationPayload.c_str());
     initializeSpaces();
+
+    ECL::setInterval(keepAlive)
 }
 
 // =========================
@@ -76,11 +84,6 @@ void setup()
 void loop()
 {
     ECL::loop();
-    
-    ECL::publish("api/keep_alive", stationId.c_str());
-    ECL::log.printf("PUBLISH %s %s\n", "api/keep_alive", stationId.c_str());
-
-    delay(1000);
 }
 
 // =========================
@@ -108,7 +111,8 @@ int topicToSpaceId(const char *topic)
 // =========================
 // EVENT HANDLERS
 // =========================
-void allow_access(int spaceId){ // called when a valid rfid was presented and the server responded in time
+void allow_access(int spaceId)
+{ // called when a valid rfid was presented and the server responded in time
     String spaceStr = String(spaceId);
     String unlockTopic = "space/" + spaceStr + "/solenoid";
     ECL::publish(unlockTopic.c_str(), "unlock");
@@ -159,19 +163,23 @@ void validate_access(char *topic, char *payload) // called when the server respo
         int currentTime = millis();
 
         // keeping this in requires some extra counter, otherwise it loops forever
-        /*if (currentTime - spaces[spaceId].last_access_attempt_time > MAX_ACCESS_DELAY) 
+        /*if (currentTime - spaces[spaceId].last_access_attempt_time > MAX_ACCESS_DELAY)
         {
             attempt_access(topic, payload);
         }*/
 
-        if (currentTime - spaces[spaceId].last_access_attempt_time <= MAX_ACCESS_DELAY){ // still up to date
-            if (strcmp(rfid, spaces[spaceId].last_access_attempt_rfid.c_str()) == 0){ // rfid matches db
+        if (currentTime - spaces[spaceId].last_access_attempt_time <= MAX_ACCESS_DELAY)
+        { // still up to date
+            if (strcmp(rfid, spaces[spaceId].last_access_attempt_rfid.c_str()) == 0)
+            { // rfid matches db
                 allow_access(spaceId);
             }
-            else if (strcmp(rfid, "ACCESS-FREE") == 0) {
+            else if (strcmp(rfid, "ACCESS-FREE") == 0)
+            {
                 allow_access(spaceId);
             }
-            else {
+            else
+            {
                 ECL::log.println("RFID not authorized for this space");
             }
         }
@@ -189,7 +197,7 @@ void attempt_access(char *topic, char *payload) // called when the user presents
         spaces[spaceId].last_access_attempt_time = millis();
         spaces[spaceId].last_access_attempt_rfid = String(payload);
     }
- 
+
     String payloadStr = "\"station\": \"" + stationId + "\", \"space\": \"" + spaceStr + "\"";
     ECL::publish("api/space", payloadStr.c_str());
     ECL::log.printf("PUBLISH %s %s\n", "api/space", payloadStr.c_str());
@@ -199,7 +207,6 @@ void attempt_access(char *topic, char *payload) // called when the user presents
         spaceId,
         rfid.c_str());
 }
-
 
 void update_space(char *topic, char *payload)
 {

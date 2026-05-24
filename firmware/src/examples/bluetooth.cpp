@@ -80,7 +80,6 @@ void setup()
 void loop()
 {
     ECL::loop();
-
     if (hardwareSerial.available())
     {
         String incoming = hardwareSerial.readStringUntil('\n');
