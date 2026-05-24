@@ -28,7 +28,8 @@ def notification_handler(sender, data):
             if topic == "SYSTEM" and payload == "SYNC_COMPLETE":
                 print("✅ --- STATE SYNC COMPLETE ---")
             elif topic.startswith("api/"):
-                asyncio.create_task(handle_api_topic(topic, payload))
+                loop = asyncio.get_running_loop()
+                loop.create_task(handle_api_topic(topic, payload))
             else:
                 print(f"[DATA] Topic: {topic} | Payload: {payload}")
                 
