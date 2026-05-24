@@ -1,6 +1,6 @@
-// #define ECL_ESPNOW_ENABLE
+#define ECL_ESPNOW_ENABLE
 
-#include "ECL8266.h"
+#include "ECL.h"
 
 constexpr uint8_t RELAY_PIN = D5;
 constexpr uint8_t RELAY_ON = LOW;
@@ -15,7 +15,7 @@ unsigned long lockStart = 0;
 
 void publishState()
 {
-    ECL::publish(STATE_TOPIC, unlocked ? "unlocked" : "locked");
+    ECL::publish(STATE_TOPIC, locked ? "locked" : "unlocked");
 }
 
 void lock()
