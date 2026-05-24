@@ -120,10 +120,10 @@ uint8_t _broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 bool _isMsgSeen(uint32_t nId, uint32_t mId)
 {
-    uint32_t hash = nId ^ mId;
+    uint64_t signature = ((uint64_t)nId << 32) | mId;
     for (int i = 0; i < MAX_SEEN_MSGS; i++)
     {
-        if (_seenMsgs[i] == hash)
+        if (_seenMsgs[i] == signature)
             return true;
     }
     return false;
@@ -131,7 +131,8 @@ bool _isMsgSeen(uint32_t nId, uint32_t mId)
 
 void _markMsgSeen(uint32_t nId, uint32_t mId)
 {
-    _seenMsgs[_seenMsgIdx] = (nId ^ mId);
+    uint64_t signature = ((uint64_t)nId << 32) | mId;
+    _seenMsgs[_seenMsgIdx] = signature;
     _seenMsgIdx = (_seenMsgIdx + 1) % MAX_SEEN_MSGS;
 }
 
@@ -306,6 +307,8 @@ namespace ECL
 
         if (_isMsgSeen(msg->nodeId, msg->msgId))
             return;
+
+        _markMsgSeen(msg->nodeId, msg->msgId);
 
         uint8_t nextHead = (_qHead + 1) % MAX_QUEUE_SIZE;
         if (nextHead != _qTail)
