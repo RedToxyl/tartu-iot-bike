@@ -66,7 +66,12 @@ def get_space_state():
     station_id = data.get("station")
     space_id = data.get("space")
 
-    return _get_space_state(station_id, space_id)
+    row = _get_space_state(station_id, space_id)
+    
+    if not row:
+        return {"error": "Space not found"}, 404
+
+    return dict(row)
 
 def _get_space_state(station_id, space_id):
     conn = get_db()
@@ -76,9 +81,9 @@ def _get_space_state(station_id, space_id):
     conn.close()
 
     if not row:
-        return {"error": "Space not found"}, 404
-    
-    return row 
+        return None
+
+    return dict(row)
 
 @app.route("/api/reset_db", methods=["POST"])
 @require_api_key
